@@ -132,7 +132,7 @@ func TestBroker_processPlugin(t *testing.T) {
 					"containerImage": image,
 				},
 			},
-			err:"Neither 'extension' no 'url' attributes found in VS Code extension description of the plugin tid:tv",
+			err:fmt.Sprintf(errorNoFieldsTemplate, "tid", "tv"),
 		},
 		{
 			name:"Return error when neither attributes nor URL are present",
@@ -140,7 +140,7 @@ func TestBroker_processPlugin(t *testing.T) {
 				ID:      pluginID,
 				Version: pluginVersion,
 			},
-			err:"Neither 'extension' no 'url' attributes found in VS Code extension description of the plugin tid:tv",
+			err:fmt.Sprintf(errorNoFieldsTemplate, "tid", "tv"),
 		},
 		{
 			name:"Return error when both extension and URL are present",
@@ -153,7 +153,7 @@ func TestBroker_processPlugin(t *testing.T) {
 					"containerImage": image,
 				},
 			},
-			err:"VS Code extension description of the plugin tid:tv might contain either 'extension' or 'url' attributes, but both of them are found",
+			err:fmt.Sprintf(errorMutuallyExclusiveTemplate, "tid", "tv"),
 		},
 		{
 			name:"Successful brokering of remote plugin with extension field",
@@ -248,14 +248,14 @@ func expectedPluginsWithSingleRemotePlugin() []model.ChePlugin {
 			Version: pluginVersion,
 			Endpoints: []model.Endpoint{
 				{
-					Name:       "randomEndpointName",
+					Name:       "randomString1234567890",
 					Public:     false,
 					TargetPort: 4242,
 				},
 			},
 			Containers: []model.Container{
 				{
-					Name:  "pluginsidecarrandomContainerSuffix",
+					Name:  "pluginsidecarrandomString123456",
 					Image: image,
 					Volumes: []model.Volume{
 						{
@@ -283,7 +283,7 @@ func expectedPluginsWithSingleRemotePlugin() []model.ChePlugin {
 			WorkspaceEnv: []model.EnvVar{
 				{
 					Name:  "THEIA_PLUGIN_REMOTE_ENDPOINT_" + prettyID,
-					Value: "ws://randomEndpointName:4242",
+					Value: "ws://randomString1234567890:4242",
 				},
 			},
 		},
@@ -302,41 +302,40 @@ func expectedPluginsWithSingleLocalPlugin() []model.ChePlugin {
 }
 
 func setUpSuccessfulCase(workDir string, meta model.PluginMeta, m *mocks) {
-	archivePath := filepath.Join(workDir, "pluginArchive")
-	unarchivedPath := filepath.Join(workDir, "plugin")
-	packageJSONPath := filepath.Join(unarchivedPath, "extension", "package.json")
-	pluginPath := filepath.Join("/plugins", fmt.Sprintf("%s.%s", meta.ID, meta.Version))
 	packageJSON := model.PackageJSON{
 		Name:      extName,
 		Publisher: extPublisher,
 	}
-	m.u.On("Unzip", archivePath, unarchivedPath).Return(func(archive string, dest string) error {
-		tests.CreateDirs(filepath.Join(dest, "extension"))
+	m.u.On("Unzip", mock.AnythingOfType("string"), mock.AnythingOfType("string")).Return(func(archive string, dest string) error {
+		packageJSONParent := filepath.Join(dest, "extension")
+		tests.CreateDirs(packageJSONParent)
+		packageJSONPath := filepath.Join(packageJSONParent, "package.json")
 		tests.CreateFileWithContent(packageJSONPath, tests.ToJSONQuiet(packageJSON))
 		return nil
 	})
-	m.u.On("CopyResource", unarchivedPath, pluginPath).Return(nil)
-	m.u.On("CopyFile", archivePath, pluginPath+".vsix").Return(nil)
+	m.u.On("CopyResource", mock.AnythingOfType("string"), mock.AnythingOfType("string")).Return(nil)
+	pluginPath := filepath.Join("/plugins", fmt.Sprintf("%s.%s.randomString1234567890.vsix", meta.ID, meta.Version))
+	m.u.On("CopyFile", mock.AnythingOfType("string"), pluginPath).Return(nil)
 	m.cb.On("PrintDebug", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"))
 	m.cb.On("PrintDebug", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"))
 	m.cb.On("PrintInfo", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"))
-	m.u.On("Download", vsixURL, archivePath).Return(nil)
+	m.u.On("Download", vsixURL, mock.AnythingOfType("string")).Return(nil)
 	m.u.On("TempDir", "", "vscode-extension-broker").Return(workDir, nil)
 	m.randMock.On("IntFromRange", 4000, 10000).Return(4242)
-	m.randMock.On("String", 10).Return("randomEndpointName")
-	m.randMock.On("String", 6).Return("randomContainerSuffix")
+	m.randMock.On("String", 10).Return("randomString1234567890")
+	m.randMock.On("String", 6).Return("randomString123456")
 }
 
 func setUpDownloadFailureCase(workDir string, m *mocks) {
-	archivePath := filepath.Join(workDir, "pluginArchive")
+	//archivePath := filepath.Join(workDir, "pluginArchive")
 	m.cb.On("PrintDebug", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"))
 	m.cb.On("PrintDebug", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"))
 	m.cb.On("PrintInfo", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"))
-	m.u.On("Download", vsixBrokenURL, archivePath).Return(errors.New("Failed to download plugin")).Once()
+	m.u.On("Download", vsixBrokenURL, mock.AnythingOfType("string")).Return(errors.New("Failed to download plugin")).Once()
 	m.u.On("TempDir", "", "vscode-extension-broker").Return(workDir, nil).Once()
 	m.randMock.On("IntFromRange", 4000, 10000).Return(4242).Once()
-	m.randMock.On("String", 10).Return("randomEndpointName").Once()
-	m.randMock.On("String", 6).Return("randomContainerSuffix").Once()
+	m.randMock.On("String", 10).Return("randomString1234567890")
+	m.randMock.On("String", 6).Return("randomString123456")
 }
 
 func TestFetchExtensionInfo(t *testing.T) {
@@ -347,7 +346,7 @@ func TestFetchExtensionInfo(t *testing.T) {
 		roundTF test.RoundTripFunc
 	}{
 		{
-			err: "VS Code extension id 'invalidExt' parsing failed for plugin tid:tv",
+			err: "Parsing of VS Code extension ID 'invalidExt' failed for plugin 'tid:tv'. Extension should start from 'vscode:extension/'",
 			ext: "invalidExt",
 		},
 		{
