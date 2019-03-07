@@ -109,6 +109,8 @@ func (b *Broker) processPlugin(meta model.PluginMeta) error {
 		return fmt.Errorf("VS Code extension description of the plugin %s:%s might contain either 'extension' or 'url' attributes, but both of them are found", meta.ID, meta.Version)
 	}
 
+	url, err := b.getExtensionArchiveURL(extension, meta)
+
 	workDir, err := b.ioUtil.TempDir("", "vscode-extension-broker")
 	if err != nil {
 		return err
@@ -116,22 +118,9 @@ func (b *Broker) processPlugin(meta model.PluginMeta) error {
 
 	archivePath := filepath.Join(workDir, "pluginArchive")
 
-	// Download an archive
-	if url != "" {
-		b.PrintDebug("Downloading VS Code extension archive '%s' for plugin '%s:%s' to '%s'", url, meta.ID, meta.Version, archivePath)
-		b.PrintInfo("Downloading VS Code extension for plugin '%s:%s'", meta.ID, meta.Version)
-		err = b.downloadArchive(url, archivePath)
-		if err != nil {
-			return err
-		}
-	} else {
-		b.PrintDebug("Downloading VS Code extension '%s' for plugin '%s:%s' to '%s'", extension, meta.ID, meta.Version, archivePath)
-		b.PrintInfo("Downloading VS Code extension for plugin '%s:%s'", meta.ID, meta.Version)
-		err = b.downloadExtension(extension, archivePath, meta)
-		if err != nil {
-			return err
-		}
-	}
+	b.PrintDebug("Downloading VS Code extension archive '%s' for plugin '%s:%s' to '%s'", url, meta.ID, meta.Version, archivePath)
+	b.PrintInfo("Downloading VS Code extension for plugin '%s:%s'", meta.ID, meta.Version)
+	err = b.downloadArchive(url, archivePath)
 
 	image := meta.Attributes["containerImage"]
 	if image == "" {
@@ -177,18 +166,17 @@ func (b *Broker) injectRemotePlugin(meta model.PluginMeta, image string, archive
 	return b.Storage.AddPlugin(&meta, tooling)
 }
 
-func (b *Broker) downloadExtension(extension string, dest string, meta model.PluginMeta) error {
+func (b *Broker) getExtensionArchiveURL(extension string, meta model.PluginMeta) (string, error) {
 	response, err := b.fetchExtensionInfo(extension, meta)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	URL, err := findAssetURL(response, meta)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	return b.downloadArchive(URL, dest)
+	return URL, nil
 }
 
 func (b *Broker) downloadArchive(URL string, dest string) error {
