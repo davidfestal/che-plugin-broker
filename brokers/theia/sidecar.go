@@ -20,6 +20,7 @@ import (
 	"github.com/eclipse/che-plugin-broker/model"
 )
 
+// TODO add tests
 // GenerateSidecarTooling generates Theia plugin runner sidecar and adds a single plugin to it
 func GenerateSidecarTooling(image string, pj model.PackageJSON, rand common.Random) *model.ToolingConf {
 	tooling := &model.ToolingConf{}
