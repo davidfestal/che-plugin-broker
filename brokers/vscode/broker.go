@@ -200,7 +200,7 @@ func (b *Broker) getExtensionsAndURLs(meta model.PluginMeta) (e []string, u []st
 	}
 	if meta.Extensions != nil && len(meta.Extensions) != 0 {
 		if isSet {
-			return nil, nil, errors.New("")
+			return nil, nil, fmt.Errorf(errorMutuallyExclusiveTemplate, meta.ID, meta.Version)
 		}
 		isSet = true
 		for _, v := range meta.Extensions {

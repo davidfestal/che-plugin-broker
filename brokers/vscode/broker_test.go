@@ -124,7 +124,7 @@ func TestBroker_processPlugin(t *testing.T) {
 		want []model.ChePlugin
 	}{
 		{
-			name:"Return error when neither extension nor URL are present",
+			name:"Return error when neither extension nor URL nor extensions are present",
 			meta:model.PluginMeta{
 				ID:      pluginID,
 				Version: pluginVersion,
@@ -135,7 +135,7 @@ func TestBroker_processPlugin(t *testing.T) {
 			err:fmt.Sprintf(errorNoFieldsTemplate, "tid", "tv"),
 		},
 		{
-			name:"Return error when neither attributes nor URL are present",
+			name:"Return error when neither attributes nor URL nor extensions are present",
 			meta:model.PluginMeta{
 				ID:      pluginID,
 				Version: pluginVersion,
@@ -143,7 +143,25 @@ func TestBroker_processPlugin(t *testing.T) {
 			err:fmt.Sprintf(errorNoFieldsTemplate, "tid", "tv"),
 		},
 		{
-			name:"Return error when both extension and URL are present",
+			name:"Return error when neither attributes nor URL are present and extensions are nil",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions:nil,
+			},
+			err:fmt.Sprintf(errorNoFieldsTemplate, "tid", "tv"),
+		},
+		{
+			name:"Return error when neither attributes nor URL are present and extensions are empty",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{},
+			},
+			err:fmt.Sprintf(errorNoFieldsTemplate, "tid", "tv"),
+		},
+		{
+			name:"Return error when both extension and URL fields are present",
 			meta:model.PluginMeta{
 				ID:      pluginID,
 				Version: pluginVersion,
@@ -151,6 +169,32 @@ func TestBroker_processPlugin(t *testing.T) {
 				Attributes: map[string]string{
 					"extension": "vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
 					"containerImage": image,
+				},
+			},
+			err:fmt.Sprintf(errorMutuallyExclusiveTemplate, "tid", "tv"),
+		},
+		{
+			name:"Return error when both extensions and URL fields are present",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				URL:     vsixURL,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+				},
+			},
+			err:fmt.Sprintf(errorMutuallyExclusiveTemplate, "tid", "tv"),
+		},
+		{
+			name:"Return error when both extensions and extension fields are present",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+				},
+				Attributes: map[string]string{
+					"extension": "vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
 				},
 			},
 			err:fmt.Sprintf(errorMutuallyExclusiveTemplate, "tid", "tv"),
@@ -191,7 +235,7 @@ func TestBroker_processPlugin(t *testing.T) {
 			want:expectedPluginsWithSingleLocalPlugin(),
 		},
 		{
-			name:"Successful brokering of local plugin with URL field",
+			name:"Successful brokering of local plugin with URL field and empty attributes",
 			meta:model.PluginMeta{
 				ID:      pluginID,
 				Version: pluginVersion,
@@ -210,6 +254,101 @@ func TestBroker_processPlugin(t *testing.T) {
 			},
 			want:expectedPluginsWithSingleLocalPlugin(),
 		},
+		{
+			name:"Successful brokering of local plugin with extensions field",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+				},
+			},
+			want:expectedPluginsWithSingleLocalPlugin(),
+		},
+		{
+			name:"Successful brokering of local plugin with extensions field and empty attributes",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Attributes: map[string]string{
+				},
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+				},
+			},
+			want:expectedPluginsWithSingleLocalPlugin(),
+		},
+		{
+			name:"Successful brokering of local plugin with extensions field with several extensions",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+					"vscode:extension/redhat-com.vscode-jdt-ls",
+					"vscode:extension/redhat-com.vscode-maven",
+				},
+			},
+			want:expectedPluginsWithSingleLocalPlugin(),
+		},
+		{
+			name:"Successful brokering of local plugin with extensions field with mixed extensions and archives URLs",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+					"vscode:extension/redhat-com.vscode-jdt-ls",
+					"vscode:extension/redhat-com.vscode-maven",
+				},
+			},
+			want:expectedPluginsWithSingleLocalPlugin(),
+		},
+		{
+			name:"Successful brokering of remote plugin with extensions field with several extensions",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+					"vscode:extension/redhat-com.vscode-jdt-ls",
+					"vscode:extension/redhat-com.vscode-maven",
+				},
+				Attributes: map[string]string{
+					"containerImage": image,
+				},
+			},
+			want:expectedPluginsWithSingleRemotePluginWithSeveralExtensions("vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+				"vscode:extension/redhat-com.vscode-jdt-ls",
+				"vscode:extension/redhat-com.vscode-maven"),
+		},/*
+		{
+			name:"Successful brokering of remote plugin with extensions field with mixed extensions and archives URLs",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+					"vscode:extension/redhat-com.vscode-jdt-ls",
+					"vscode:extension/redhat-com.vscode-maven",
+				},
+				Attributes: map[string]string{
+					"containerImage": image,
+				},
+			},
+			want:expectedPluginsWithSingleRemotePlugin(),
+		},
+		{
+			name:"Successful brokering of remote plugin with extensions field",
+			meta:model.PluginMeta{
+				ID:      pluginID,
+				Version: pluginVersion,
+				Extensions: []string{
+					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
+				},
+			},
+			want:expectedPluginsWithSingleRemotePlugin(),
+		},*/
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -238,6 +377,57 @@ func TestBroker_processPlugin(t *testing.T) {
 			}
 		})
 	}
+}
+
+func expectedPluginsWithSingleRemotePluginWithSeveralExtensions(s string, s2 string, s3 string) []model.ChePlugin {
+	prettyID := "Test_publisher_Test_name"
+	expectedPlugins := []model.ChePlugin{
+		{
+			ID:      pluginID,
+			Version: pluginVersion,
+			Endpoints: []model.Endpoint{
+				{
+					Name:       "randomString1234567890",
+					Public:     false,
+					TargetPort: 4242,
+				},
+			},
+			Containers: []model.Container{
+				{
+					Name:  "pluginsidecarrandomString123456",
+					Image: image,
+					Volumes: []model.Volume{
+						{
+							Name:      "projects",
+							MountPath: "/projects",
+						},
+						{
+							Name:      "plugins",
+							MountPath: "/plugins",
+						},
+					},
+					Ports: []model.ExposedPort{
+						{
+							ExposedPort: 4242,
+						},
+					},
+					Env: []model.EnvVar{
+						{
+							Name:  "THEIA_PLUGIN_ENDPOINT_PORT",
+							Value: "4242",
+						},
+					},
+				},
+			},
+			WorkspaceEnv: []model.EnvVar{
+				{
+					Name:  "THEIA_PLUGIN_REMOTE_ENDPOINT_" + prettyID,
+					Value: "ws://randomString1234567890:4242",
+				},
+			},
+		},
+	}
+	return expectedPlugins
 }
 
 func expectedPluginsWithSingleRemotePlugin() []model.ChePlugin {
