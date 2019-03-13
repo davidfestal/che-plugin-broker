@@ -122,6 +122,7 @@ func TestBroker_processPlugin(t *testing.T) {
 		meta model.PluginMeta
 		err string
 		want []model.ChePlugin
+		unzipFunc UnzipFunc
 	}{
 		{
 			name:"Return error when neither extension nor URL nor extensions are present",
@@ -318,10 +319,15 @@ func TestBroker_processPlugin(t *testing.T) {
 					"containerImage": image,
 				},
 			},
-			want:expectedPluginsWithSingleRemotePluginWithSeveralExtensions("vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
-				"vscode:extension/redhat-com.vscode-jdt-ls",
-				"vscode:extension/redhat-com.vscode-maven"),
-		},/*
+			unzipFunc:createUnzipFuncStub(
+				generatePackageJSON("ms-kubernetes-tools", "vscode-kubernetes-tools"),
+				generatePackageJSON("redhat-com", "vscode-jdt-ls"),
+				generatePackageJSON("redhat-com", "vscode-maven")),
+			want:expectedPluginsWithSingleRemotePluginWithSeveralExtensions(
+				generateTheiaEnvVar("ms_kubernetes_tools_vscode_kubernetes_tools"),
+				generateTheiaEnvVar("redhat_com_vscode_jdt_ls"),
+				generateTheiaEnvVar("redhat_com_vscode_maven")),
+		},
 		{
 			name:"Successful brokering of remote plugin with extensions field with mixed extensions and archives URLs",
 			meta:model.PluginMeta{
@@ -329,14 +335,21 @@ func TestBroker_processPlugin(t *testing.T) {
 				Version: pluginVersion,
 				Extensions: []string{
 					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
-					"vscode:extension/redhat-com.vscode-jdt-ls",
+					vsixURL,
 					"vscode:extension/redhat-com.vscode-maven",
 				},
 				Attributes: map[string]string{
 					"containerImage": image,
 				},
 			},
-			want:expectedPluginsWithSingleRemotePlugin(),
+			unzipFunc:createUnzipFuncStub(
+				generatePackageJSON("ms-kubernetes-tools", "vscode-kubernetes-tools"),
+				generatePackageJSON("redhat-com", "vscode-jdt-ls"),
+				generatePackageJSON("redhat-com", "vscode-maven")),
+			want:expectedPluginsWithSingleRemotePluginWithSeveralExtensions(
+				generateTheiaEnvVar("ms_kubernetes_tools_vscode_kubernetes_tools"),
+				generateTheiaEnvVar("redhat_com_vscode_jdt_ls"),
+				generateTheiaEnvVar("redhat_com_vscode_maven")),
 		},
 		{
 			name:"Successful brokering of remote plugin with extensions field",
@@ -346,16 +359,22 @@ func TestBroker_processPlugin(t *testing.T) {
 				Extensions: []string{
 					"vscode:extension/ms-kubernetes-tools.vscode-kubernetes-tools",
 				},
+				Attributes: map[string]string{
+					"containerImage": image,
+				},
 			},
-			want:expectedPluginsWithSingleRemotePlugin(),
-		},*/
+			unzipFunc:createUnzipFuncStub(
+				generatePackageJSON("ms-kubernetes-tools", "vscode-kubernetes-tools")),
+			want:expectedPluginsWithSingleRemotePluginWithSeveralExtensions(
+				generateTheiaEnvVar("ms_kubernetes_tools_vscode_kubernetes_tools")),
+		},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			m := initMocks()
 			workDir := tests.CreateTestWorkDir()
 			defer tests.RemoveAll(workDir)
-			setUpSuccessfulCase(workDir, tt.meta, m)
+			setUpSuccessfulCase(workDir, tt.meta, m, tt.unzipFunc)
 
 			if tt.want == nil && tt.err == "" {
 				t.Fatal("Neither want nor error are defined")
@@ -379,55 +398,66 @@ func TestBroker_processPlugin(t *testing.T) {
 	}
 }
 
-func expectedPluginsWithSingleRemotePluginWithSeveralExtensions(s string, s2 string, s3 string) []model.ChePlugin {
-	prettyID := "Test_publisher_Test_name"
-	expectedPlugins := []model.ChePlugin{
-		{
-			ID:      pluginID,
-			Version: pluginVersion,
-			Endpoints: []model.Endpoint{
-				{
-					Name:       "randomString1234567890",
-					Public:     false,
-					TargetPort: 4242,
-				},
+func generatePackageJSON(publisher string, name string) model.PackageJSON {
+	return model.PackageJSON{
+		Name:name,
+		Publisher:publisher,
+	}
+}
+
+func generateTheiaEnvVar(prettyID string) string {
+	return "THEIA_PLUGIN_REMOTE_ENDPOINT_" + prettyID
+}
+
+func expectedPluginsWithSingleRemotePluginWithSeveralExtensions(pluginTheiaEndpointVars ...string) []model.ChePlugin {
+	expectedPlugin := model.ChePlugin{
+		ID:      pluginID,
+		Version: pluginVersion,
+		Endpoints: []model.Endpoint{
+			{
+				Name:       "randomString1234567890",
+				Public:     false,
+				TargetPort: 4242,
 			},
-			Containers: []model.Container{
-				{
-					Name:  "pluginsidecarrandomString123456",
-					Image: image,
-					Volumes: []model.Volume{
-						{
-							Name:      "projects",
-							MountPath: "/projects",
-						},
-						{
-							Name:      "plugins",
-							MountPath: "/plugins",
-						},
+		},
+		Containers: []model.Container{
+			{
+				Name:  "pluginsidecarrandomString123456",
+				Image: image,
+				Volumes: []model.Volume{
+					{
+						Name:      "projects",
+						MountPath: "/projects",
 					},
-					Ports: []model.ExposedPort{
-						{
-							ExposedPort: 4242,
-						},
-					},
-					Env: []model.EnvVar{
-						{
-							Name:  "THEIA_PLUGIN_ENDPOINT_PORT",
-							Value: "4242",
-						},
+					{
+						Name:      "plugins",
+						MountPath: "/plugins",
 					},
 				},
-			},
-			WorkspaceEnv: []model.EnvVar{
-				{
-					Name:  "THEIA_PLUGIN_REMOTE_ENDPOINT_" + prettyID,
-					Value: "ws://randomString1234567890:4242",
+				Ports: []model.ExposedPort{
+					{
+						ExposedPort: 4242,
+					},
+				},
+				Env: []model.EnvVar{
+					{
+						Name:  "THEIA_PLUGIN_ENDPOINT_PORT",
+						Value: "4242",
+					},
 				},
 			},
 		},
 	}
-	return expectedPlugins
+	for _, envVarName := range pluginTheiaEndpointVars {
+		expectedPlugin.WorkspaceEnv = append(expectedPlugin.WorkspaceEnv, model.EnvVar{
+			Name:  envVarName,
+			Value: "ws://randomString1234567890:4242",
+		})
+	}
+
+	return []model.ChePlugin{
+		expectedPlugin,
+	}
 }
 
 func expectedPluginsWithSingleRemotePlugin() []model.ChePlugin {
@@ -491,18 +521,12 @@ func expectedPluginsWithSingleLocalPlugin() []model.ChePlugin {
 	return expectedPlugins
 }
 
-func setUpSuccessfulCase(workDir string, meta model.PluginMeta, m *mocks) {
-	packageJSON := model.PackageJSON{
-		Name:      extName,
-		Publisher: extPublisher,
+func setUpSuccessfulCase(workDir string, meta model.PluginMeta, m *mocks, unzipFunc UnzipFunc) {
+	_unzipFunc := defaultUnzipFunc()
+	if unzipFunc != nil {
+		_unzipFunc = unzipFunc
 	}
-	m.u.On("Unzip", mock.AnythingOfType("string"), mock.AnythingOfType("string")).Return(func(archive string, dest string) error {
-		packageJSONParent := filepath.Join(dest, "extension")
-		tests.CreateDirs(packageJSONParent)
-		packageJSONPath := filepath.Join(packageJSONParent, "package.json")
-		tests.CreateFileWithContent(packageJSONPath, tests.ToJSONQuiet(packageJSON))
-		return nil
-	})
+	m.u.On("Unzip", mock.AnythingOfType("string"), mock.AnythingOfType("string")).Run(_unzipFunc).Return(nil)
 	m.u.On("CopyResource", mock.AnythingOfType("string"), mock.AnythingOfType("string")).Return(nil)
 	pluginPath := filepath.Join("/plugins", fmt.Sprintf("%s.%s.randomString1234567890.vsix", meta.ID, meta.Version))
 	m.u.On("CopyFile", mock.AnythingOfType("string"), pluginPath).Return(nil)
@@ -514,6 +538,39 @@ func setUpSuccessfulCase(workDir string, meta model.PluginMeta, m *mocks) {
 	m.randMock.On("IntFromRange", 4000, 10000).Return(4242)
 	m.randMock.On("String", 10).Return("randomString1234567890")
 	m.randMock.On("String", 6).Return("randomString123456")
+}
+
+type UnzipFunc func(args mock.Arguments)
+
+func defaultUnzipFunc() UnzipFunc {
+	return func(args mock.Arguments) {
+		var dest string
+		dest = args[1].(string)
+		packageJSON := model.PackageJSON{
+			Name:      extName,
+			Publisher: extPublisher,
+		}
+		packageJSONParent := filepath.Join(dest, "extension")
+		tests.CreateDirs(packageJSONParent)
+		packageJSONPath := filepath.Join(packageJSONParent, "package.json")
+		tests.CreateFileWithContent(packageJSONPath, tests.ToJSONQuiet(packageJSON))
+	}
+}
+
+func createUnzipFuncStub(pjs ...model.PackageJSON) UnzipFunc {
+	jsons := pjs
+	return func(args mock.Arguments) {
+		var dest string
+		dest = args[1].(string)
+		packageJSONParent := filepath.Join(dest, "extension")
+		tests.CreateDirs(packageJSONParent)
+		packageJSONPath := filepath.Join(packageJSONParent, "package.json")
+		json := jsons[0]
+		if len(jsons) > 1 {
+			jsons = jsons[1:]
+		}
+		tests.CreateFileWithContent(packageJSONPath, tests.ToJSONQuiet(json))
+	}
 }
 
 func setUpDownloadFailureCase(workDir string, m *mocks) {
